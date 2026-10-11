@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="#FF87CEEB"
+    android:padding="32dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="РЕЖИМ ИГРЫ"
+        android:textStyle="bold"
+        android:textColor="#FF222222"
+        android:textSize="28sp"
+        android:gravity="center"
+        android:maxLines="1"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:layout_marginBottom="48dp" />
+
+    <Button
+        android:id="@+id/btnLevels"
+        android:layout_width="280dp"
+        android:layout_height="72dp"
+        android:text="Кампания"
+        android:textSize="24sp"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/btnTutorial"
+        android:layout_width="280dp"
+        android:layout_height="72dp"
+        android:text="Обучение"
+        android:textSize="24sp"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/btnFreePlay"
+        android:layout_width="280dp"
+        android:layout_height="72dp"
+        android:text="Свободная игра"
+        android:textSize="22sp"
+        android:layout_marginBottom="32dp" />
+
+    <Button
+        android:id="@+id/btnBack"
+        android:layout_width="280dp"
+        android:layout_height="56dp"
+        android:text="Назад"
+        android:textSize="18sp" />
+
+</LinearLayout>
