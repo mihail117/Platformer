@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
+    android:gravity="center_horizontal"
     android:background="#FF87CEEB"
     android:padding="32dp">
 
@@ -15,25 +15,31 @@
         android:textColor="#FF222222"
         android:textSize="28sp"
         android:gravity="center"
-        android:maxLines="1"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
-        android:layout_marginBottom="48dp" />
+        android:layout_marginBottom="40dp" />
+
+    <Spinner
+        android:id="@+id/spinnerMode"
+        android:layout_width="280dp"
+        android:layout_height="56dp"
+        android:background="#FFFFFFFF"
+        android:layout_marginBottom="20dp" />
 
     <Button
-        android:id="@+id/btnPeaceful"
+        android:id="@+id/btnChoose"
         android:layout_width="280dp"
         android:layout_height="72dp"
-        android:text="Мирный режим"
-        android:textSize="22sp"
-        android:layout_marginBottom="16dp" />
+        android:text="Выбрать уровень"
+        android:textSize="20sp"
+        android:layout_marginBottom="12dp" />
 
-    <Button
-        android:id="@+id/btnHostile"
+    <TextView
+        android:id="@+id/tvSelected"
         android:layout_width="280dp"
-        android:layout_height="72dp"
-        android:text="Враждебный режим"
-        android:textSize="22sp"
+        android:layout_height="wrap_content"
+        android:text="Уровень не выбран"
+        android:textSize="18sp"
+        android:textColor="#FF333333"
+        android:gravity="center"
         android:layout_marginBottom="32dp" />
 
     <Button

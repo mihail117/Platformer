@@ -19,6 +19,7 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         LevelStorage.ensureDefaultExists(this);
+        LevelStorage.ensureTutorialLevels(this);   // ← добавь это
 
         Button btnPlay   = findViewById(R.id.btnPlay);
         Button btnCreate = findViewById(R.id.btnCreate);

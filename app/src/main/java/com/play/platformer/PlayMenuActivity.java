@@ -30,10 +30,10 @@ public class PlayMenuActivity extends Activity {
             startActivity(i);
         });
 
-        // --- Обучение: сразу уровень "default" в мирном режиме ---
+        // --- Обучение: сразу уровень "tutorial_1" в мирном режиме ---
         btnTutorial.setOnClickListener(v -> {
             Intent i = new Intent(this, GameActivity.class);
-            i.putExtra(GameActivity.EXTRA_LEVEL_ID, "default");
+            i.putExtra(GameActivity.EXTRA_LEVEL_ID, "tutorial_1");
             i.putExtra(GameActivity.EXTRA_MODE, GameMode.PEACEFUL.name());
             startActivity(i);
         });

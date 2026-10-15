@@ -14,8 +14,8 @@ public class Player {
     private static final float MAX_FALL    = 1500f;
     private static final float DT          = 1f / 60f;
 
-    private static final int MAX_JUMPS = 2;   // ← сколько прыжков доступно
-    private int jumpsLeft = MAX_JUMPS;
+    private int maxJumps = 2;
+    private int jumpsLeft = 2;
 
     private boolean onGround = false;
     private final RectF bounds = new RectF();
@@ -28,6 +28,14 @@ public class Player {
     }
 
     public int getJumpsLeft() { return jumpsLeft; }
+
+    public boolean isOnGroundSafe() { return onGround; }
+
+    /** Сколько прыжков разрешено: 1 — без двойного, 2 — с двойным. */
+    public void setMaxJumps(int n) {
+        this.maxJumps = Math.max(1, n);
+        this.jumpsLeft = Math.min(this.jumpsLeft, this.maxJumps);
+    }
 
     public void update(boolean left, boolean right, boolean jumpQueued, List<RectF> platforms) {
         vx = 0;
@@ -43,11 +51,17 @@ public class Player {
             jumpsLeft--;
         }
 
+        // ограничение высоты
+        if (y < 10) { y = 10; if (vy < 0) vy = 0; }
+
+        // восстановление прыжков при касании земли
+
+
         x += vx * DT;  resolveX(platforms);
         y += vy * DT;  onGround = false;  resolveY(platforms);
 
         // Коснулись земли — восстанавливаем прыжки
-        if (onGround) jumpsLeft = MAX_JUMPS;
+        if (onGround) jumpsLeft = maxJumps;
     }
 
     private void resolveX(List<RectF> plats) {

@@ -28,15 +28,34 @@ public class GameView extends SurfaceView {
     private float scale = 1f;
     private RectF finishZone;
 
-    // ----- УПРАВЛЕНИЕ -----
-    private boolean leftPressed, rightPressed, jumpQueued;
-    private int movePointerId = -1;   // id пальца, который управляет движением (-1 = нет)
-    private int moveDir = 0;          // -1 влево, +1 вправо, 0 = нет
+    public interface LevelCompleteListener {
+        void onLevelComplete();
+    }
+    private LevelCompleteListener levelCompleteListener;
 
-    public GameView(Context context, LevelData level, GameMode mode) {
+    public interface OnExitListener {
+        void onExit();
+    }
+    private OnExitListener exitListener;
+
+    private final boolean hasNextTutorial;
+    private final boolean isTutorialLevel;
+
+    private final TutorialPhrases tutorial;
+
+    private boolean leftPressed, rightPressed, jumpQueued;
+    private int movePointerId = -1;
+    private int moveDir = 0;
+
+    public GameView(Context context, LevelData level, GameMode mode, String nextLevelId) {
         super(context);
         this.level = level;
         this.mode = mode;
+        this.hasNextTutorial = (nextLevelId != null);
+        this.isTutorialLevel = (level.id != null && level.id.startsWith("tutorial_"));
+
+        this.tutorial = isTutorialLevel ? new TutorialPhrases(level.id, 100f, level.finishX) : null;
+
         holder = getHolder();
 
         gameLoop = new Runnable() {
@@ -45,13 +64,25 @@ public class GameView extends SurfaceView {
             public void run() {
                 while (running) {
                     long t0 = System.currentTimeMillis();
-                    update();
-                    draw();
+                    try {
+                        update();
+                        draw();
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                     long sleep = FRAME_TIME - (System.currentTimeMillis() - t0);
                     if (sleep > 0) try { Thread.sleep(sleep); } catch (InterruptedException ignored) { }
                 }
             }
         };
+    }
+
+    public void setLevelCompleteListener(LevelCompleteListener l) {
+        levelCompleteListener = l;
+    }
+
+    public void setOnExitListener(OnExitListener l) {
+        exitListener = l;
     }
 
     @Override
@@ -65,11 +96,14 @@ public class GameView extends SurfaceView {
 
     private void initFromLevel() {
         player = new Player(100, LevelData.WORLD_HEIGHT - 400);
+        if (tutorial != null && !tutorial.isDoubleJumpEnabled()) {
+            player.setMaxJumps(1);
+        }
         finishZone = new RectF(
                 level.finishX,
-                LevelData.WORLD_HEIGHT - 650,
-                level.finishX + 100,
-                LevelData.WORLD_HEIGHT - 450
+                0,
+                level.finishX + 40,
+                LevelData.WORLD_HEIGHT
         );
         state = STATE_PLAYING;
         cameraX = 0;
@@ -84,23 +118,58 @@ public class GameView extends SurfaceView {
         jumpQueued = false;
     }
 
+    private void releaseInput() {
+        movePointerId = -1;
+        moveDir = 0;
+        leftPressed = false;
+        rightPressed = false;
+        jumpQueued = false;
+    }
+
     private void respawn() {
         player = new Player(100, LevelData.WORLD_HEIGHT - 400);
+        if (tutorial != null && !tutorial.isDoubleJumpEnabled()) {
+            player.setMaxJumps(1);
+        }
         cameraX = 0;
         state = STATE_PLAYING;
         resetInput();
+        if (tutorial != null) tutorial.reset();
     }
 
     private void update() {
         if (player == null || state != STATE_PLAYING) return;
 
-        player.update(leftPressed, rightPressed, jumpQueued, level.platforms);
+        if (tutorial != null && tutorial.isFrozen()) {
+            releaseInput();
+            player.update(false, false, false, level.platforms);
+            return;
+        }
+
+        if (tutorial != null) {
+            tutorial.checkAutoTrigger(player.x);
+            if (tutorial.isFrozen()) {
+                releaseInput();
+                player.update(false, false, false, level.platforms);
+                return;
+            }
+            tutorial.checkAutoTrigger2(player.x);
+            if (tutorial.isFrozen()) {
+                releaseInput();
+                player.update(false, false, false, level.platforms);
+                return;
+            }
+        }
+
+        boolean jumpAllowed = jumpQueued && (tutorial == null || tutorial.isJumpEnabled());
+        player.update(leftPressed, rightPressed, jumpAllowed, level.platforms);
         jumpQueued = false;
 
         if (player.y > LevelData.WORLD_HEIGHT + 200) {
             deaths++; state = STATE_DEAD; return;
         }
-        if (RectF.intersects(player.getBounds(), finishZone)) {
+        boolean winActive = (tutorial == null) || tutorial.isWinEnabled();
+        if (winActive && RectF.intersects(player.getBounds(), finishZone)) {
             state = STATE_WIN; return;
         }
 
@@ -121,43 +190,76 @@ public class GameView extends SurfaceView {
         c.scale(scale, scale);
         c.translate(-cameraX, 0);
 
-        paint.setColor(Color.rgb(60, 40, 20));
-        for (RectF p : level.platforms) c.drawRect(p, paint);
-
-        paint.setColor(Color.rgb(50, 200, 50));
-        c.drawRect(finishZone, paint);
-
-        int col;
-        switch (player.getJumpsLeft()) {
-            case 0:  col = Color.rgb(140, 140, 140); break;
-            case 1:  col = Color.rgb(255, 150, 0);   break;
-            default: col = Color.rgb(220, 50, 50);
+        for (RectF p : level.platforms) {
+            paint.setColor(Color.rgb(80, 50, 25));
+            c.drawRect(p, paint);
+            paint.setColor(Color.rgb(80, 180, 60));
+            c.drawRect(p.left, p.top, p.right, p.top + 12, paint);
+            paint.setColor(Color.rgb(60, 140, 45));
+            c.drawRect(p.left, p.top + 12, p.right, p.top + 18, paint);
         }
-        paint.setColor(col);
+
+        paint.setColor(Color.rgb(220, 50, 50));
         c.drawRect(player.getBounds(), paint);
 
         c.restore();
 
-        drawControls(c);
+        boolean frozen = (tutorial != null && tutorial.isFrozen());
+        if (!frozen) {
+            drawControls(c);
+        }
         drawHud(c);
+        if (tutorial != null) {
+            tutorial.draw(c, paint);
+        }
         drawOverlays(c);
+        drawExitButton(c);   // самая верхняя — всегда видна в обучении
 
         holder.unlockCanvasAndPost(c);
     }
 
-    // ================= ПОДСКАЗКИ НА ЭКРАНЕ =================
+    // ===== КНОПКА «ВЫЙТИ» (только для tutorial-уровней) =====
+    private RectF exitButtonRect() {
+        float w = getWidth();
+        return new RectF(w - 170, 20, w - 20, 90);
+    }
+
+    private boolean hitExitButton(float x, float y) {
+        return exitButtonRect().contains(x, y);
+    }
+
+    private void drawExitButton(Canvas c) {
+        if (!isTutorialLevel) return;
+
+        RectF r = exitButtonRect();
+
+        paint.setColor(Color.argb(160, 0, 0, 0));
+        c.drawRect(r, paint);
+
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(3);
+        paint.setColor(Color.WHITE);
+        c.drawRect(r, paint);
+        paint.setStyle(Paint.Style.FILL);
+
+        paint.setColor(Color.WHITE);
+        paint.setTextSize(36);
+        paint.setTextAlign(Paint.Align.CENTER);
+        c.drawText("Выйти", r.centerX(), r.centerY() + 12, paint);
+        paint.setTextAlign(Paint.Align.LEFT);
+    }
+
     private void drawControls(Canvas c) {
         float w = getWidth(), h = getHeight();
         float midX = w / 2f;
+        boolean jumpEnabled = (tutorial == null || tutorial.isJumpEnabled());
 
         if (state == STATE_PLAYING) {
             if (moveDir == 0) {
-                // Ничего не держим — показываем обе половины как «зоны»
                 paint.setColor(Color.argb(30, 255, 255, 255));
                 c.drawRect(0, 0, midX, h, paint);
                 c.drawRect(midX, 0, w, h, paint);
 
-                // разделитель
                 paint.setColor(Color.argb(60, 255, 255, 255));
                 paint.setStrokeWidth(2);
                 c.drawLine(midX, 0, midX, h, paint);
@@ -174,40 +276,38 @@ public class GameView extends SurfaceView {
                 c.drawText("удерживай", midX + midX / 2f, h / 2f + 30, paint);
                 paint.setTextAlign(Paint.Align.LEFT);
             } else if (moveDir == 1) {
-                // Держим ПРАВУЮ половину → двигаемся вправо.
-                // На левой половине показываем «ПРЫЖОК»
-                paint.setColor(Color.argb(50, 100, 255, 100));   // лёгкая подсветка левой половины
+                paint.setColor(Color.argb(50, 100, 255, 100));
                 c.drawRect(0, 0, midX, h, paint);
 
-                paint.setColor(Color.argb(180, 100, 255, 100));
-                paint.setTextAlign(Paint.Align.CENTER);
-                paint.setTextSize(80);
-                c.drawText("↑", midX / 2f, h / 2f - 10, paint);
-                paint.setTextSize(32);
-                c.drawText("ПРЫЖОК", midX / 2f, h / 2f + 50, paint);
-                paint.setTextAlign(Paint.Align.LEFT);
+                if (jumpEnabled) {
+                    paint.setColor(Color.argb(180, 100, 255, 100));
+                    paint.setTextAlign(Paint.Align.CENTER);
+                    paint.setTextSize(80);
+                    c.drawText("↑", midX / 2f, h / 2f - 10, paint);
+                    paint.setTextSize(32);
+                    c.drawText("ПРЫЖОК", midX / 2f, h / 2f + 50, paint);
+                    paint.setTextAlign(Paint.Align.LEFT);
+                }
 
-                // правая половина — лёгкое подтверждение движения
                 paint.setColor(Color.argb(80, 255, 255, 255));
                 paint.setTextAlign(Paint.Align.CENTER);
                 paint.setTextSize(60);
                 c.drawText("→→→", midX + midX / 2f, h / 2f, paint);
                 paint.setTextAlign(Paint.Align.LEFT);
             } else if (moveDir == -1) {
-                // Держим ЛЕВУЮ половину → двигаемся влево.
-                // На правой половине — «ПРЫЖОК»
                 paint.setColor(Color.argb(50, 100, 255, 100));
                 c.drawRect(midX, 0, w, h, paint);
 
-                paint.setColor(Color.argb(180, 100, 255, 100));
-                paint.setTextAlign(Paint.Align.CENTER);
-                paint.setTextSize(80);
-                c.drawText("↑", midX + midX / 2f, h / 2f - 10, paint);
-                paint.setTextSize(32);
-                c.drawText("ПРЫЖОК", midX + midX / 2f, h / 2f + 50, paint);
-                paint.setTextAlign(Paint.Align.LEFT);
+                if (jumpEnabled) {
+                    paint.setColor(Color.argb(180, 100, 255, 100));
+                    paint.setTextAlign(Paint.Align.CENTER);
+                    paint.setTextSize(80);
+                    c.drawText("↑", midX + midX / 2f, h / 2f - 10, paint);
+                    paint.setTextSize(32);
+                    c.drawText("ПРЫЖОК", midX + midX / 2f, h / 2f + 50, paint);
+                    paint.setTextAlign(Paint.Align.LEFT);
+                }
 
-                // левая половина — подтверждение движения
                 paint.setColor(Color.argb(80, 255, 255, 255));
                 paint.setTextAlign(Paint.Align.CENTER);
                 paint.setTextSize(60);
@@ -217,10 +317,8 @@ public class GameView extends SurfaceView {
         }
     }
 
-    // ================= HUD =================
     private void drawHud(Canvas c) {
         float w = getWidth();
-
         float barW = Math.min(w * 0.22f, 400f);
         float barH = 40;
         float barX = 300;
@@ -240,13 +338,10 @@ public class GameView extends SurfaceView {
 
         if (state == STATE_PLAYING) {
             float progress = Math.min(1f, player.x / level.finishX);
-
             paint.setColor(Color.argb(150, 0, 0, 0));
             c.drawRect(barX, barY, barX + barW, barY + barH, paint);
-
             paint.setColor(Color.rgb(50, 200, 50));
             c.drawRect(barX, barY, barX + barW * progress, barY + barH, paint);
-
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(3);
             paint.setColor(Color.WHITE);
@@ -276,20 +371,20 @@ public class GameView extends SurfaceView {
             paint.setTextSize(48);
             c.drawText("Смертей: " + deaths, w / 2f, h / 2f + 30, paint);
             paint.setTextSize(40);
-            c.drawText("Тапни чтобы играть снова", w / 2f, h / 2f + 120, paint);
+
+            String winHint;
+            if (hasNextTutorial) {
+                winHint = "Тапни → следующий уровень";
+            } else if (isTutorialLevel) {
+                winHint = "Тапни → в главное меню";
+            } else {
+                winHint = "Тапни чтобы играть снова";
+            }
+            c.drawText(winHint, w / 2f, h / 2f + 120, paint);
         }
         paint.setTextAlign(Paint.Align.LEFT);
     }
 
-    // ================= УПРАВЛЕНИЕ =================
-    // Логика:
-    //   1) Первый тап определяет направление по половине экрана:
-    //        левая половина  → движение влево
-    //        правая половина → движение вправо
-    //   2) Пока этот палец держится, ЛЮБОЙ другой тап = ПРЫЖОК
-    //      (то есть противоположная половина автоматически становится «кнопкой прыжка»)
-    //   3) Отпустил палец движения — можно снова тапнуть по любой половине,
-    //      чтобы начать новое движение
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent e) {
@@ -298,11 +393,30 @@ public class GameView extends SurfaceView {
         int id     = e.getPointerId(idx);
         float midX = getWidth() / 2f;
 
-        // --- экраны смерти/победы: любой тап = рестарт ---
+        // ===== КНОПКА «ВЫЙТИ» — обрабатывается первой =====
+        if (isTutorialLevel
+                && (action == MotionEvent.ACTION_DOWN
+                || action == MotionEvent.ACTION_POINTER_DOWN)) {
+            if (hitExitButton(e.getX(idx), e.getY(idx))) {
+                if (exitListener != null) exitListener.onExit();
+                return true;
+            }
+        }
+
+        // фразы обучения — тап «съедается»
+        if (tutorial != null && tutorial.handleTouch(e)) {
+            return true;
+        }
+
         if (state != STATE_PLAYING) {
             if (action == MotionEvent.ACTION_DOWN || action == MotionEvent.ACTION_POINTER_DOWN) {
-                if (state == STATE_WIN) deaths = 0;
-                respawn();
+                if (state == STATE_WIN && levelCompleteListener != null
+                        && (hasNextTutorial || isTutorialLevel)) {
+                    levelCompleteListener.onLevelComplete();
+                } else {
+                    if (state == STATE_WIN) deaths = 0;
+                    respawn();
+                }
             }
             return true;
         }
@@ -311,13 +425,10 @@ public class GameView extends SurfaceView {
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_POINTER_DOWN: {
                 float x = e.getX(idx);
-
                 if (movePointerId == -1) {
-                    // это палец движения — определяем направление по половине
                     movePointerId = id;
                     moveDir = (x < midX) ? -1 : +1;
                 } else {
-                    // уже есть палец движения → этот тап = прыжок
                     jumpQueued = true;
                 }
                 break;
@@ -325,7 +436,6 @@ public class GameView extends SurfaceView {
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_POINTER_UP: {
                 if (id == movePointerId) {
-                    // палец движения отпущен — сбрасываем движение
                     movePointerId = -1;
                     moveDir = 0;
                 }
@@ -352,9 +462,6 @@ public class GameView extends SurfaceView {
 
     public void pause() {
         running = false;
-        if (gameThread != null) {
-            try { gameThread.join(); } catch (InterruptedException ignored) {}
-            gameThread = null;
-        }
+        gameThread = null;
     }
 }
